@@ -1,0 +1,19 @@
+{
+  "crons": [
+    {
+      "comment": "Pull fresh standings/scoreboard/roster data from Yahoo for every connected league.",
+      "path": "/api/cron/sync-leagues",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "comment": "Sunday 11:00 UTC lineup-lock reminders (adjust to your slate's kickoff time).",
+      "path": "/api/cron/lineup-reminders",
+      "schedule": "0 11 * * 0"
+    },
+    {
+      "comment": "Tuesday 13:00 UTC weekly recap + trash talk push to every manager.",
+      "path": "/api/cron/weekly-recap",
+      "schedule": "0 13 * * 2"
+    }
+  ]
+}
