@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
 
     let sent = 0;
     let skipped = 0;
+    const failed: Array<{ managerId: string; error: string }> = [];
 
     for (const manager of managers ?? []) {
       const { data: already } = await supabase
@@ -62,7 +63,17 @@ export async function GET(request: NextRequest) {
       }
 
       const text = `Lineups lock soon for week ${week} in ${league.name} — double check your bench before kickoff.`;
-      await sendTextMessage(manager.phone_e164, text);
+
+      // One recipient's send failing (e.g. a Linq sandbox "recipient not
+      // allowed" restriction) shouldn't stop everyone else in the league
+      // from getting their reminder.
+      try {
+        await sendTextMessage(manager.phone_e164, text);
+      } catch (err) {
+        console.error(`Failed to send lineup reminder to manager ${manager.id}`, err);
+        failed.push({ managerId: manager.id, error: err instanceof Error ? err.message : String(err) });
+        continue;
+      }
 
       await Promise.all([
         supabase.from('scheduled_sends').insert({
@@ -82,7 +93,7 @@ export async function GET(request: NextRequest) {
       sent++;
     }
 
-    summary[league.id] = { week, sent, skipped };
+    summary[league.id] = { week, sent, skipped, failed };
   }
 
   return NextResponse.json({ summary });
