@@ -44,16 +44,17 @@ export function routeChat({ system, messages, maxOutputTokens = 2048 }: RouteCha
       // invisible reasoning tokens before writing the visible reply. `low`
       // was truncating replies mid-sentence back when maxOutputTokens was
       // only 800; now that it's 2048 (plus the empty-reply guard in
-      // collectText), `medium` gives noticeably better reasoning on
-      // trade/keeper analysis without piling as much extra latency on top
-      // of search grounding as `high` would.
+      // collectText), `high` gives the deepest reasoning for trade grading
+      // (positional baselines, production gaps, multi-year auction-dollar
+      // value) at the cost of more latency — acceptable since the
+      // thinking-ack covers the wait.
       //
       // useSearchGrounding lets the model run a live Google Search before
       // answering — needed so player news (injuries, trades) from minutes
       // ago is reflected, not just what's in the base model's training
       // data or our own 15-minute Yahoo sync cache.
       google: {
-        thinkingConfig: { thinkingLevel: 'medium' },
+        thinkingConfig: { thinkingLevel: 'high' },
         useSearchGrounding: true,
       },
     },
