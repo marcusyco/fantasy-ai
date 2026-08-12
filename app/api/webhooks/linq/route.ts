@@ -13,6 +13,17 @@ import { generateAssistantReply } from '@/lib/ai/assistant';
 export const runtime = 'nodejs'; // signature verification uses node:crypto
 export const maxDuration = 30; // AI generation + Linq round-trip can take a few seconds
 
+const THINKING_ACK_DELAY_MS = 3000;
+const THINKING_ACK_MESSAGES = [
+  "Good question — let me dig into that for you.",
+  "Hang tight, checking the latest before I answer.",
+  "One sec, pulling up the numbers.",
+];
+
+function randomThinkingAck(): string {
+  return THINKING_ACK_MESSAGES[Math.floor(Math.random() * THINKING_ACK_MESSAGES.length)]!;
+}
+
 /**
  * Inbound iMessage/RCS/SMS handler. Register this URL as a webhook
  * subscription for `message.received` in the Linq dashboard (Webhook
@@ -140,6 +151,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, groupMessageIgnored: true });
   }
 
+  // If the real answer takes a while (e.g. search-grounded lookups), send a
+  // quick "still working on it" ack so the manager isn't left staring at a
+  // silent thread. Cleared as soon as the real reply is ready, so fast
+  // replies never trigger it.
+  const thinkingAckText = randomThinkingAck();
+  const thinkingAckTimer = setTimeout(() => {
+    sendMessageToChat(event.data.chat.id, thinkingAckText)
+      .then((sent) =>
+        supabase.from('messages').insert({
+          league_id: manager.league_id,
+          manager_id: manager.id,
+          chat_thread_id: chatThread.id,
+          direction: 'outbound',
+          body: thinkingAckText,
+          linq_message_id: sent.id,
+        })
+      )
+      .catch((err) => console.error('Failed to send "thinking" ack message.', err));
+  }, THINKING_ACK_DELAY_MS);
+
   let replyText: string;
   try {
     replyText = await generateAssistantReply({
@@ -152,6 +183,8 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('Assistant generation failed.', err);
     replyText = "Sorry, I hit a snag pulling that up — give me a minute and try again.";
+  } finally {
+    clearTimeout(thinkingAckTimer);
   }
 
   // Reply into the same chat (not just the sender's phone) so group replies

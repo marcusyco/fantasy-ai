@@ -45,8 +45,14 @@ export function routeChat({ system, messages, maxOutputTokens = 2048 }: RouteCha
       // a short-texting use case that was eating the whole budget and
       // truncating replies mid-sentence (finishReason: "length"). `low`
       // leaves the budget for the actual answer instead.
+      //
+      // useSearchGrounding lets the model run a live Google Search before
+      // answering — needed so player news (injuries, trades) from minutes
+      // ago is reflected, not just what's in the base model's training
+      // data or our own 15-minute Yahoo sync cache.
       google: {
         thinkingConfig: { thinkingLevel: 'low' },
+        useSearchGrounding: true,
       },
     },
   });
