@@ -6,7 +6,8 @@ import {
   LinqWebhookVerificationError,
 } from '@/lib/linq/webhook';
 import { extractE164FromHandle } from '@/lib/linq/types';
-import { sendTextMessage } from '@/lib/linq/client';
+import { sendTextMessage, sendMessageToChat } from '@/lib/linq/client';
+import { isBotMentioned } from '@/lib/linq/mentions';
 import { generateAssistantReply } from '@/lib/ai/assistant';
 
 export const runtime = 'nodejs'; // signature verification uses node:crypto
@@ -81,6 +82,10 @@ export async function POST(request: NextRequest) {
     .eq('phone_e164', phone);
 
   if (!candidates || candidates.length === 0) {
+    // v2: self-serve onboarding — let an unrecognized number text in, ask
+    // for their name, and auto-create a manager row (gated by an invite
+    // code so strangers can't join a league just by knowing the number).
+    // For now managers are added manually by the commissioner ahead of time.
     await sendTextMessage(
       phone,
       "Hey! I don't have this number linked to a league yet — ask your commissioner to add you in the dashboard."
@@ -100,20 +105,48 @@ export async function POST(request: NextRequest) {
     manager = candidates.find((c) => c.id === lastActive?.manager_id) ?? manager;
   }
 
+  // A chat thread is just "a Linq conversation" — could be this manager's
+  // 1:1 with the bot, the whole league's group text, or a couple managers
+  // hashing out a trade in their own group. Register it the first time we
+  // see its `chat.id`; every message we see afterward reuses this row.
+  const { data: chatThread, error: chatThreadError } = await supabase
+    .from('chat_threads')
+    .upsert(
+      { league_id: manager.league_id, linq_chat_id: event.data.chat.id, is_group: event.data.chat.is_group },
+      { onConflict: 'linq_chat_id' }
+    )
+    .select('id, is_group')
+    .single();
+
+  if (chatThreadError || !chatThread) {
+    console.error('Failed to upsert chat thread.', chatThreadError);
+    return NextResponse.json({ error: 'failed to record chat thread' }, { status: 500 });
+  }
+
   await supabase.from('messages').insert({
     league_id: manager.league_id,
     manager_id: manager.id,
+    chat_thread_id: chatThread.id,
     direction: 'inbound',
     body: textPart.value,
     linq_message_id: event.data.id,
     linq_event_id: event.event_id,
   });
 
+  // In a group thread, only respond when directly addressed — otherwise
+  // the bot would reply to every message in a busy league-wide group text.
+  // The inbound message is still logged above so it has context for later.
+  if (chatThread.is_group && !isBotMentioned(textPart.value)) {
+    return NextResponse.json({ ok: true, groupMessageIgnored: true });
+  }
+
   let replyText: string;
   try {
     replyText = await generateAssistantReply({
       leagueId: manager.league_id,
       managerId: manager.id,
+      chatThreadId: chatThread.id,
+      isGroup: chatThread.is_group,
       incomingText: textPart.value,
     });
   } catch (err) {
@@ -121,14 +154,17 @@ export async function POST(request: NextRequest) {
     replyText = "Sorry, I hit a snag pulling that up — give me a minute and try again.";
   }
 
-  const sendResult = await sendTextMessage(phone, replyText);
+  // Reply into the same chat (not just the sender's phone) so group replies
+  // land back in the shared thread instead of opening a side 1:1.
+  const sendResult = await sendMessageToChat(event.data.chat.id, replyText);
 
   await supabase.from('messages').insert({
     league_id: manager.league_id,
     manager_id: manager.id,
+    chat_thread_id: chatThread.id,
     direction: 'outbound',
     body: replyText,
-    linq_message_id: sendResult.message_id,
+    linq_message_id: sendResult.id,
   });
 
   return NextResponse.json({ ok: true });

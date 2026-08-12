@@ -108,10 +108,22 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['managers']['Insert']>;
         Relationships: [];
       };
-      linq_chats: {
-        Row: { id: string; manager_id: string; linq_chat_id: string; created_at: string };
-        Insert: { id?: string; manager_id: string; linq_chat_id: string; created_at?: string };
-        Update: Partial<Database['public']['Tables']['linq_chats']['Insert']>;
+      chat_threads: {
+        Row: {
+          id: string;
+          league_id: string;
+          linq_chat_id: string;
+          is_group: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          league_id: string;
+          linq_chat_id: string;
+          is_group?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['chat_threads']['Insert']>;
         Relationships: [];
       };
       messages: {
@@ -119,6 +131,7 @@ export interface Database {
           id: string;
           league_id: string;
           manager_id: string | null;
+          chat_thread_id: string | null;
           direction: 'inbound' | 'outbound';
           body: string;
           linq_message_id: string | null;
@@ -129,6 +142,7 @@ export interface Database {
           id?: string;
           league_id: string;
           manager_id?: string | null;
+          chat_thread_id?: string | null;
           direction: 'inbound' | 'outbound';
           body: string;
           linq_message_id?: string | null;

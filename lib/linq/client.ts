@@ -1,4 +1,4 @@
-import type { LinqSendMessageRequest, LinqSendMessageResponse } from './types';
+import type { LinqSendMessageRequest, LinqSendMessageResponse, LinqMessagePart } from './types';
 
 const LINQ_API_BASE = 'https://api.linqapp.com/api/partner/v3';
 
@@ -47,6 +47,36 @@ export async function sendTextMessage(
   }
 
   return JSON.parse(raw) as LinqSendMessageResponse;
+}
+
+export interface LinqSentMessage {
+  id: string;
+  delivery_status: string;
+  parts: LinqMessagePart[];
+}
+
+/**
+ * Reply into an existing chat (1:1 or group) by its Linq chat id, rather
+ * than addressing a phone number. Required for group threads — replying
+ * via `sendTextMessage` to just the sender's phone would start a new 1:1
+ * side-conversation instead of posting back into the shared group.
+ */
+export async function sendMessageToChat(chatId: string, text: string): Promise<LinqSentMessage> {
+  const res = await fetch(`${LINQ_API_BASE}/chats/${chatId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${requireApiKey()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ parts: [{ type: 'text', value: text }] }),
+  });
+
+  const raw = await res.text();
+  if (!res.ok) {
+    throw new LinqApiError(res.status, raw);
+  }
+
+  return JSON.parse(raw) as LinqSentMessage;
 }
 
 /**

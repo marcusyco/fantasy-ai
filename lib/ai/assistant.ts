@@ -15,15 +15,27 @@ function buildSystemPrompt(params: {
   season: number;
   managerName: string;
   isCommissioner: boolean;
+  isGroup: boolean;
   standings: unknown | null;
   scoreboard: unknown | null;
   contextMarkdown: string | null;
 }): string {
-  const { leagueName, season, managerName, isCommissioner, standings, scoreboard, contextMarkdown } = params;
+  const { leagueName, season, managerName, isCommissioner, isGroup, standings, scoreboard, contextMarkdown } = params;
+
+  const audience = isGroup
+    ? [
+        `You're in a group iMessage/RCS/SMS thread with multiple managers from this league — could be the`,
+        `whole league or just a few managers hashing out a trade. You only see messages here that`,
+        `explicitly mention you ("CommishBot" or "CommishAI"); the message below is from ${managerName}`,
+        `${isCommissioner ? '(the commissioner) ' : ''}addressing you that way. Earlier lines in the`,
+        `history are prefixed with who said them — use those names when it helps (e.g. referring to both`,
+        `sides of a trade), but don't over-explain who's who if it's not relevant.`,
+      ].join(' ')
+    : `You're texting one-on-one with ${managerName}${isCommissioner ? ', who is the league commissioner' : ''} over iMessage.`;
 
   return [
     `You are the AI assistant for the fantasy football league "${leagueName}" (${season} season).`,
-    `You're texting with ${managerName}${isCommissioner ? ', who is the league commissioner' : ''} over iMessage.`,
+    audience,
     '',
     'Tone: sound like a sharp, funny group-chat friend, not a customer support bot. Keep',
     'replies short enough for a text message (usually 1-4 sentences). No markdown, no bullet',
@@ -44,6 +56,8 @@ function buildSystemPrompt(params: {
 export interface AssistantReplyParams {
   leagueId: string;
   managerId: string;
+  chatThreadId: string;
+  isGroup: boolean;
   incomingText: string;
 }
 
@@ -57,6 +71,8 @@ export interface AssistantReplyParams {
 export async function generateAssistantReply({
   leagueId,
   managerId,
+  chatThreadId,
+  isGroup,
   incomingText,
 }: AssistantReplyParams): Promise<string> {
   const supabase = createAdminClient();
@@ -87,8 +103,8 @@ export async function generateAssistantReply({
         .maybeSingle(),
       supabase
         .from('messages')
-        .select('direction, body, created_at')
-        .eq('manager_id', managerId)
+        .select('direction, body, manager_id, created_at')
+        .eq('chat_thread_id', chatThreadId)
         .order('created_at', { ascending: false })
         .limit(HISTORY_LIMIT),
     ]);
@@ -102,20 +118,38 @@ export async function generateAssistantReply({
     season: league.season,
     managerName: manager.display_name,
     isCommissioner: manager.is_commissioner,
+    isGroup,
     standings: standingsRow?.payload ?? null,
     scoreboard: scoreboardRow?.payload ?? null,
     contextMarkdown: league.context_markdown,
   });
 
+  // Group threads have multiple human senders funneled into the single
+  // `user` role the model sees — bake the sender's name into the message
+  // text itself so the model can tell who said what.
+  let namesByManagerId = new Map<string, string>();
+  if (isGroup && history && history.length > 0) {
+    const managerIds = [...new Set(history.map((row) => row.manager_id).filter((id): id is string => !!id))];
+    if (managerIds.length > 0) {
+      const { data: senders } = await supabase.from('managers').select('id, display_name').in('id', managerIds);
+      namesByManagerId = new Map((senders ?? []).map((sender) => [sender.id, sender.display_name]));
+    }
+  }
+
   const conversation: CoreMessage[] = (history ?? [])
     .slice()
     .reverse()
-    .map((row) => ({
-      role: row.direction === 'inbound' ? 'user' : 'assistant',
-      content: row.body,
-    }));
+    .map((row) => {
+      const isInbound = row.direction === 'inbound';
+      const speakerName = row.manager_id ? namesByManagerId.get(row.manager_id) : undefined;
+      const content = isGroup && isInbound && speakerName ? `${speakerName}: ${row.body}` : row.body;
+      return { role: isInbound ? 'user' : 'assistant', content };
+    });
 
-  conversation.push({ role: 'user', content: incomingText });
+  conversation.push({
+    role: 'user',
+    content: isGroup ? `${manager.display_name}: ${incomingText}` : incomingText,
+  });
 
   return collectText({ system, messages: conversation });
 }
