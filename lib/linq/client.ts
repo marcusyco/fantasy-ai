@@ -68,7 +68,7 @@ export async function sendMessageToChat(chatId: string, text: string): Promise<L
       Authorization: `Bearer ${requireApiKey()}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ parts: [{ type: 'text', value: text }] }),
+    body: JSON.stringify({ message: { parts: [{ type: 'text', value: text }] } }),
   });
 
   const raw = await res.text();
