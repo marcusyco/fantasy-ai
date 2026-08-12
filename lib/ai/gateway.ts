@@ -27,7 +27,7 @@ export interface RouteChatOptions {
  * Returns the AI SDK `streamText` result so callers can either pipe it to
  * a UI stream response or collect the full text (see `collectText`).
  */
-export function routeChat({ system, messages, maxOutputTokens = 800 }: RouteChatOptions) {
+export function routeChat({ system, messages, maxOutputTokens = 2048 }: RouteChatOptions) {
   return streamText({
     model: PRIMARY_MODEL,
     system,
