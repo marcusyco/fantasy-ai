@@ -40,6 +40,14 @@ export function routeChat({ system, messages, maxOutputTokens = 800 }: RouteChat
         // iMessage and can't just show a "try again" spinner.
         models: [FALLBACK_MODEL],
       },
+      // Gemini 3.x "thinking" models spend part of maxOutputTokens on
+      // invisible reasoning tokens before writing the visible reply — for
+      // a short-texting use case that was eating the whole budget and
+      // truncating replies mid-sentence (finishReason: "length"). `low`
+      // leaves the budget for the actual answer instead.
+      google: {
+        thinkingConfig: { thinkingLevel: 'low' },
+      },
     },
   });
 }
