@@ -41,17 +41,19 @@ export function routeChat({ system, messages, maxOutputTokens = 2048 }: RouteCha
         models: [FALLBACK_MODEL],
       },
       // Gemini 3.x "thinking" models spend part of maxOutputTokens on
-      // invisible reasoning tokens before writing the visible reply — for
-      // a short-texting use case that was eating the whole budget and
-      // truncating replies mid-sentence (finishReason: "length"). `low`
-      // leaves the budget for the actual answer instead.
+      // invisible reasoning tokens before writing the visible reply. `low`
+      // was truncating replies mid-sentence back when maxOutputTokens was
+      // only 800; now that it's 2048 (plus the empty-reply guard in
+      // collectText), `medium` gives noticeably better reasoning on
+      // trade/keeper analysis without piling as much extra latency on top
+      // of search grounding as `high` would.
       //
       // useSearchGrounding lets the model run a live Google Search before
       // answering — needed so player news (injuries, trades) from minutes
       // ago is reflected, not just what's in the base model's training
       // data or our own 15-minute Yahoo sync cache.
       google: {
-        thinkingConfig: { thinkingLevel: 'low' },
+        thinkingConfig: { thinkingLevel: 'medium' },
         useSearchGrounding: true,
       },
     },
