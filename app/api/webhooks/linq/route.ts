@@ -13,11 +13,15 @@ import { generateAssistantReply } from '@/lib/ai/assistant';
 export const runtime = 'nodejs'; // signature verification uses node:crypto
 export const maxDuration = 30; // AI generation + Linq round-trip can take a few seconds
 
-const THINKING_ACK_DELAY_MS = 3000;
+const THINKING_ACK_DELAY_MS = 6000;
 const THINKING_ACK_MESSAGES = [
   "Good question — let me dig into that for you.",
+  "Good question, let me find the right answer for you.",
   "Hang tight, checking the latest before I answer.",
   "One sec, pulling up the numbers.",
+  "Give me a sec to look into that.",
+  "Let me check on that real quick.",
+  "Digging in — back in a sec.",
 ];
 
 function randomThinkingAck(): string {
