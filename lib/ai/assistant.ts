@@ -17,8 +17,9 @@ function buildSystemPrompt(params: {
   isCommissioner: boolean;
   standings: unknown | null;
   scoreboard: unknown | null;
+  contextMarkdown: string | null;
 }): string {
-  const { leagueName, season, managerName, isCommissioner, standings, scoreboard } = params;
+  const { leagueName, season, managerName, isCommissioner, standings, scoreboard, contextMarkdown } = params;
 
   return [
     `You are the AI assistant for the fantasy football league "${leagueName}" (${season} season).`,
@@ -28,12 +29,15 @@ function buildSystemPrompt(params: {
     'replies short enough for a text message (usually 1-4 sentences). No markdown, no bullet',
     'points, no headers — this renders as plain iMessage text.',
     '',
-    'Ground every factual claim (scores, standings, records, roster moves) in the league data',
-    'below. If something the manager asks about isn\'t in this data, say you\'re not sure rather',
-    'than guessing.',
+    'Ground every factual claim (scores, standings, records, roster moves, past trades/drafts)',
+    'in the league data below. If something the manager asks about isn\'t in this data, say',
+    'you\'re not sure rather than guessing.',
     '',
     `Current standings (Yahoo Fantasy, cached): ${standings ? truncate(standings) : 'not synced yet'}`,
     `Current scoreboard (Yahoo Fantasy, cached): ${scoreboard ? truncate(scoreboard) : 'not synced yet'}`,
+    '',
+    'League history and context (commissioner-provided):',
+    contextMarkdown ?? 'none provided yet',
   ].join('\n');
 }
 
@@ -59,7 +63,7 @@ export async function generateAssistantReply({
 
   const [{ data: league }, { data: manager }, { data: standingsRow }, { data: scoreboardRow }, { data: history }] =
     await Promise.all([
-      supabase.from('leagues').select('name, season').eq('id', leagueId).single(),
+      supabase.from('leagues').select('name, season, context_markdown').eq('id', leagueId).single(),
       supabase
         .from('managers')
         .select('display_name, is_commissioner')
@@ -100,6 +104,7 @@ export async function generateAssistantReply({
     isCommissioner: manager.is_commissioner,
     standings: standingsRow?.payload ?? null,
     scoreboard: scoreboardRow?.payload ?? null,
+    contextMarkdown: league.context_markdown,
   });
 
   const conversation: CoreMessage[] = (history ?? [])

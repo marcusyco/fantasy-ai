@@ -40,8 +40,9 @@ export interface Database {
           name: string;
           sport: string;
           season: number;
-          yahoo_league_key: string;
+          yahoo_league_key: string | null;
           timezone: string;
+          context_markdown: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -51,8 +52,9 @@ export interface Database {
           name: string;
           sport?: string;
           season: number;
-          yahoo_league_key: string;
+          yahoo_league_key?: string | null;
           timezone?: string;
+          context_markdown?: string | null;
         };
         Update: Partial<Database['public']['Tables']['leagues']['Insert']>;
         Relationships: [];

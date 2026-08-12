@@ -28,6 +28,10 @@ export async function GET(request: NextRequest) {
 
   const results = await Promise.all(
     (leagues ?? []).map(async (league) => {
+      if (!league.yahoo_league_key) {
+        return { leagueId: league.id, ok: true, skipped: 'no Yahoo connection' };
+      }
+
       try {
         const accessToken = await getFreshAccessToken(league.id);
         const meta = await getLeagueMeta(league.yahoo_league_key, accessToken);
