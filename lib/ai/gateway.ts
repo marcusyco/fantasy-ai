@@ -61,5 +61,18 @@ export function routeChat({ system, messages, maxOutputTokens = 2048 }: RouteCha
 /** Convenience for server contexts (webhooks, cron) that need plain text, not a stream. */
 export async function collectText(options: RouteChatOptions): Promise<string> {
   const result = routeChat(options);
-  return result.text;
+  const text = await result.text;
+
+  if (!text.trim()) {
+    // Seen with useSearchGrounding: a grounded response can apparently
+    // finish without ever emitting a text part. Log everything useful for
+    // diagnosing why, since this is otherwise a silent failure downstream.
+    const [finishReason, sources] = await Promise.all([result.finishReason, result.sources]);
+    console.error('collectText: model produced an empty response.', {
+      finishReason,
+      sourceCount: sources?.length,
+    });
+  }
+
+  return text;
 }

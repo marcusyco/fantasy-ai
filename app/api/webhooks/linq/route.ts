@@ -187,6 +187,14 @@ export async function POST(request: NextRequest) {
     clearTimeout(thinkingAckTimer);
   }
 
+  // Linq rejects an empty text part outright — guard against the model
+  // finishing with nothing to say (seen with search-grounded responses)
+  // rather than letting that 400 kill the whole request silently.
+  if (!replyText.trim()) {
+    console.error('Assistant generated an empty reply; sending fallback instead.');
+    replyText = "I looked into that but didn't come up with a clear answer — try rephrasing?";
+  }
+
   // Reply into the same chat (not just the sender's phone) so group replies
   // land back in the shared thread instead of opening a side 1:1.
   const sendResult = await sendMessageToChat(event.data.chat.id, replyText);
